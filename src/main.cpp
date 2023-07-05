@@ -19,7 +19,7 @@ constexpr int SCREEN_WIDTH = 800;
 constexpr int SCREEN_HEIGHT = 600;
 
 const char* geometryVS =
-    "#version 450\n"
+    "#version 410\n"
     "layout (location = 0) in vec3 aPos;\n"
     "layout (location = 1) in vec2 aTexCoords;\n"
     "layout (location = 2) in vec3 aNormal;\n"
@@ -41,7 +41,7 @@ const char* geometryVS =
     "}\n";
 
 const char* geometryFS =
-    "#version 450\n"
+    "#version 410\n"
     "in vec3 FragPos;\n"
     "in vec2 TexCoords;\n"
     "in vec3 Normal;\n"
@@ -55,7 +55,7 @@ const char* geometryFS =
     "}\n";
 
 const char* ssaoVS =
-    "#version 450\n"
+    "#version 410\n"
     "layout (location = 0) in vec3 aPos;\n"
     "layout (location = 1) in vec2 aTexCoords;\n"
     "out vec2 TexCoords;\n"
@@ -65,7 +65,7 @@ const char* ssaoVS =
     "}\n";
 
 const char* ssaoFS =
-    "#version 450\n"
+    "#version 410\n"
     "uniform sampler2D gPosition;\n"
     "uniform sampler2D gNormal;\n"
     "uniform sampler2D texNoise;\n"
@@ -140,11 +140,12 @@ glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-int main() {
+int main(int argc, char** argv) {
+  std::string modelName = argc == 1 ? "car" : argv[1];
   // 初始化
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
   // 创建窗口
@@ -171,7 +172,7 @@ int main() {
 
   // 导入模型
   SkeletalMesh::Scene& sr =
-      SkeletalMesh::Scene::loadScene("car", "resources/car.fbx");
+      SkeletalMesh::Scene::loadScene(modelName, "resources/" + modelName + ".fbx");
   if (&sr == &SkeletalMesh::Scene::error)
     std::cout << "Error occured in loadMesh()" << std::endl;
 

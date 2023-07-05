@@ -13,13 +13,13 @@
 
 #include <texture_image.h>
 
-#include <assimp\postprocess.h>
-#include <assimp\scene.h>
-#include <assimp\Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+#include <assimp/Importer.hpp>
 
 #pragma comment(lib, "assimp.lib")
 
-#include <glm\glm.hpp>
+#include <glm/glm.hpp>
 
 #define SCENE_RESOURCE_SHADER_POSI_LOCATION 0
 #define SCENE_RESOURCE_SHADER_TEXC_LOCATION 1
