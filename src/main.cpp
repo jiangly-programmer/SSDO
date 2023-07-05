@@ -51,7 +51,8 @@ const char* geometryFS =
     "void main() {\n"
     "    gPosition = FragPos;\n"
     "    gNormal = normalize(Normal);\n"
-    "    gAlbedo.rgb = vec3(0.95);\n"
+    // "    gAlbedo.rgb = vec3(0.95);\n"
+    "    gAlbedo.rgb = vec3(TexCoords, 1.0);\n"
     "}\n";
 
 const char* ssaoVS =
@@ -75,7 +76,7 @@ const char* ssaoFS =
     "const float bias = 0.05;\n"
     "const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);\n" 
     "in vec2 TexCoords;\n"
-    "out float FragColor;\n"
+    "out float ssaoResult;\n"
     "void main() {\n"
     "    vec3 fragPos = texture(gPosition, TexCoords).xyz;\n"
     "    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);\n"
@@ -93,12 +94,13 @@ const char* ssaoFS =
     "        float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));\n"
     "        occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;\n"
     "    }\n"
-    "    FragColor = 1.0 - occlusion / 64.0;\n"
+    "    ssaoResult = 1.0 - occlusion / 64.0;\n"
     "}\n";
 
 const char* ssaoBlurFS =
-    "#version 450\n"
+    "#version 410\n"
     "uniform sampler2D ssaoInput;\n"
+    "uniform sampler2D gAlbedo;\n"
     "in vec2 TexCoords;\n"
     "out vec3 FragColor;\n"
     "void main() {\n"
@@ -110,7 +112,7 @@ const char* ssaoBlurFS =
     "            result += texture(ssaoInput, TexCoords + offset).r;\n"
     "        }\n"
     "    }\n"
-    "    FragColor = vec3(result / (4.0 * 4.0));\n"
+    "    FragColor = texture(gAlbedo, TexCoords).rgb * vec3(result / (4.0 * 4.0));\n"
     "}\n";
 
 void keyCallback(GLFWwindow* window,
@@ -259,7 +261,8 @@ int main(int argc, char** argv) {
   glUniform1i(glGetUniformLocation(ssaoProgram, "texNoise"), 2);
 
   glUseProgram(ssaoBlurProgram);
-  glUniform1i(glGetUniformLocation(ssaoProgram, "ssaoInput"), 0);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoInput"), 0);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gAlbedo"), 1);
 
   // 随机取样
   std::uniform_real_distribution<float> randomFloats(0.0f, 1.0f);
@@ -379,13 +382,15 @@ int main(int argc, char** argv) {
     glUseProgram(ssaoBlurProgram);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gAlbedo);
     renderQuad();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     glfwSwapBuffers(window);
   }
 
-  SkeletalMesh::Scene::unloadScene("car");
+  SkeletalMesh::Scene::unloadScene(modelName);
   glfwDestroyWindow(window);
   glfwTerminate();
   exit(EXIT_SUCCESS);
