@@ -99,8 +99,13 @@ const char* ssaoFS =
 
 const char* ssaoBlurFS =
     "#version 410\n"
+    "uniform sampler2D gPosition;\n"
+    "uniform sampler2D gNormal;\n"
     "uniform sampler2D ssaoInput;\n"
     "uniform sampler2D gAlbedo;\n"
+
+    "uniform vec3 lightPos;"
+    "uniform vec3 lightColor;"
     "in vec2 TexCoords;\n"
     "out vec3 FragColor;\n"
     "void main() {\n"
@@ -112,7 +117,7 @@ const char* ssaoBlurFS =
     "            result += texture(ssaoInput, TexCoords + offset).r;\n"
     "        }\n"
     "    }\n"
-    "    FragColor = texture(gAlbedo, TexCoords).rgb * vec3(result / (4.0 * 4.0));\n"
+    "    FragColor = lightColor * texture(gAlbedo, TexCoords).rgb * vec3(result / (4.0 * 4.0));\n"
     "}\n";
 
 void keyCallback(GLFWwindow* window,
@@ -131,6 +136,7 @@ void renderCube();
 
 glm::vec3 lightPos = glm::vec3(0.0f, 0.0f, 3.0f);
 glm::vec3 lightDir = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 
 float lastX = SCREEN_WIDTH * 0.5f;
 float lastY = SCREEN_HEIGHT * 0.5f;
@@ -261,8 +267,13 @@ int main(int argc, char** argv) {
   glUniform1i(glGetUniformLocation(ssaoProgram, "texNoise"), 2);
 
   glUseProgram(ssaoBlurProgram);
-  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoInput"), 0);
-  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gAlbedo"), 1);
+  glUniform1i(glGetUniformLocation(ssaoProgram, "gPosition"), 0);
+  glUniform1i(glGetUniformLocation(ssaoProgram, "gNormal"), 1);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoInput"), 2);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gAlbedo"), 3);
+
+  glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightPos"), 1, glm::value_ptr(lightPos));
+  glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightColor"), 1, glm::value_ptr(lightColor));
 
   // 随机取样
   std::uniform_real_distribution<float> randomFloats(0.0f, 1.0f);
@@ -381,8 +392,12 @@ int main(int argc, char** argv) {
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(ssaoBlurProgram);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+    glBindTexture(GL_TEXTURE_2D, gPosition);
     glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gNormal);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+    glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
     renderQuad();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
