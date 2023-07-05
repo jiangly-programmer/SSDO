@@ -103,9 +103,10 @@ const char* ssaoBlurFS =
     "uniform sampler2D gNormal;\n"
     "uniform sampler2D ssaoInput;\n"
     "uniform sampler2D gAlbedo;\n"
-
-    "uniform vec3 lightPos;"
-    "uniform vec3 lightColor;"
+    "uniform vec3 lightPos;\n"
+    "uniform vec3 lightColor;\n"
+    "uniform vec3 viewPos;\n"
+    "uniform float shininess;\n"
     "in vec2 TexCoords;\n"
     "out vec3 FragColor;\n"
     "void main() {\n"
@@ -117,8 +118,19 @@ const char* ssaoBlurFS =
     "            result += texture(ssaoInput, TexCoords + offset).r;\n"
     "        }\n"
     "    }\n"
-    "    FragColor = lightColor * texture(gAlbedo, TexCoords).rgb * vec3(result / (4.0 * 4.0));\n"
+    "    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);\n"
+    "    vec3 fragPos = texture(gPosition, TexCoords).rgb;\n"
+    "    vec3 lightDir = normalize(lightPos - fragPos);\n"
+    "    float diff = max(dot(normal, lightDir), 0.0);\n"
+    "    vec3 reflectDir = reflect(-lightDir, normal);\n"
+    "    vec3 viewDir = normalize(viewPos - fragPos);\n"
+    "    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);\n"
+    "    vec3 ambient = 0.1 * lightColor;\n"
+    "    vec3 diffuse = diff * lightColor;\n"
+    "    vec3 specular = spec * lightColor;\n"
+    "    FragColor = (ambient + diffuse + specular) * texture(gAlbedo, TexCoords).rgb * vec3(result / (4.0 * 4.0));\n"
     "}\n";
+
 
 void keyCallback(GLFWwindow* window,
                  int key,
@@ -137,6 +149,7 @@ void renderCube();
 glm::vec3 lightPos = glm::vec3(0.0f, 0.0f, 3.0f);
 glm::vec3 lightDir = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+float shininess = 3.0f;
 
 float lastX = SCREEN_WIDTH * 0.5f;
 float lastY = SCREEN_HEIGHT * 0.5f;
@@ -274,6 +287,8 @@ int main(int argc, char** argv) {
 
   glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightPos"), 1, glm::value_ptr(lightPos));
   glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightColor"), 1, glm::value_ptr(lightColor));
+  glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
+  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "shininess"), shininess);
 
   // 随机取样
   std::uniform_real_distribution<float> randomFloats(0.0f, 1.0f);
