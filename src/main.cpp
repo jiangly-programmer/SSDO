@@ -127,10 +127,10 @@ const char* ssaoBlurFS =
     "    vec3 reflectDir = reflect(-lightDir, normal);\n"
     "    vec3 viewDir = normalize(viewPos - fragPos);\n"
     "    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);\n"
-    "    vec3 ambient = 0.1 * lightColor;\n"
+    "    vec3 ambient = 0.1 * lightColor * vec3(ssaoResult);\n"
     "    vec3 diffuse = diff * lightColor;\n"
     "    vec3 specular = spec * lightColor;\n"
-    "    FragColor = (ambient + diffuse + specular) * texture(gAlbedo, TexCoords).rgb * vec3(ssaoResult);\n"
+    "    FragColor = (ambient + diffuse + specular) * texture(gAlbedo, TexCoords).rgb;\n"
     "}\n";
 
 
