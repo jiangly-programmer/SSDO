@@ -107,6 +107,7 @@ const char* ssaoBlurFS =
     "uniform vec3 lightColor;\n"
     "uniform vec3 viewPos;\n"
     "uniform float shininess;\n"
+    "uniform bool ssaoEnabled;\n"
     "in vec2 TexCoords;\n"
     "out vec3 FragColor;\n"
     "void main() {\n"
@@ -118,6 +119,7 @@ const char* ssaoBlurFS =
     "            result += texture(ssaoInput, TexCoords + offset).r;\n"
     "        }\n"
     "    }\n"
+    "    float ssaoResult = ssaoEnabled ? result / (4.0 * 4.0) : 1.0;\n"
     "    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);\n"
     "    vec3 fragPos = texture(gPosition, TexCoords).rgb;\n"
     "    vec3 lightDir = normalize(lightPos - fragPos);\n"
@@ -128,7 +130,7 @@ const char* ssaoBlurFS =
     "    vec3 ambient = 0.1 * lightColor;\n"
     "    vec3 diffuse = diff * lightColor;\n"
     "    vec3 specular = spec * lightColor;\n"
-    "    FragColor = (ambient + diffuse + specular) * texture(gAlbedo, TexCoords).rgb * vec3(result / (4.0 * 4.0));\n"
+    "    FragColor = (ambient + diffuse + specular) * texture(gAlbedo, TexCoords).rgb * vec3(ssaoResult);\n"
     "}\n";
 
 
@@ -156,6 +158,8 @@ float lastY = SCREEN_HEIGHT * 0.5f;
 float yaw = 90.0f;
 float pitch = 0.0f;
 float fov = 45.0f;
+
+bool ssaoEnabled = true;
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -280,8 +284,8 @@ int main(int argc, char** argv) {
   glUniform1i(glGetUniformLocation(ssaoProgram, "texNoise"), 2);
 
   glUseProgram(ssaoBlurProgram);
-  glUniform1i(glGetUniformLocation(ssaoProgram, "gPosition"), 0);
-  glUniform1i(glGetUniformLocation(ssaoProgram, "gNormal"), 1);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gPosition"), 0);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gNormal"), 1);
   glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoInput"), 2);
   glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gAlbedo"), 3);
 
@@ -414,6 +418,7 @@ int main(int argc, char** argv) {
     glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
+    glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoEnabled"), ssaoEnabled);
     renderQuad();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -439,6 +444,9 @@ void keyCallback(GLFWwindow *window,
   }
   if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
     lightfollow ^= 1;
+  }
+  if (key == GLFW_KEY_F && action == GLFW_PRESS) {
+    ssaoEnabled ^= 1;
   }
 
   if (0 <= key && key < 1024) {
