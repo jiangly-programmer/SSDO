@@ -11,6 +11,9 @@
 #include <random>
 #include <numbers>
 
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_opengl3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -173,6 +176,11 @@ glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
+void draw_ui() {
+    ImGui::SliderFloat("radius", &radius, 0.0f, 1.0f);
+    ImGui::SliderFloat("shininess", &shininess, 0.0f, 200.0f);
+}
+
 int main(int argc, char** argv) {
   std::string modelName = argc == 1 ? "car" : argv[1];
   // 初始化
@@ -197,6 +205,14 @@ int main(int argc, char** argv) {
   if (glewInit() != GLEW_OK) {
     std::exit(EXIT_FAILURE);
   }
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO();
+  (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  ImGui::StyleColorsDark();
+
+  ImGui_ImplGlfw_InitForOpenGL(window, true);
+  ImGui_ImplOpenGL3_Init("#version 150");
 
   // 编译链接着色器
   unsigned geometryProgram = createProgram(geometryVS, geometryFS);
@@ -361,6 +377,10 @@ int main(int argc, char** argv) {
 
     lastTime = curTime;
 
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
     float ratio;
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -435,9 +455,15 @@ int main(int argc, char** argv) {
     renderQuad();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    draw_ui();
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
     glfwSwapBuffers(window);
   }
 
+  ImGui::DestroyContext();
   SkeletalMesh::Scene::unloadScene(modelName);
   glfwDestroyWindow(window);
   glfwTerminate();
