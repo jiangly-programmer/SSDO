@@ -72,7 +72,7 @@ const char* ssaoFS =
     "uniform sampler2D texNoise;\n"
     "uniform vec3 kernel[64];\n"
     "uniform mat4 projection;\n"
-    "const float radius = 1.0;\n"
+    "uniform float radius;\n"
     "const float bias = 0.05;\n"
     "const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);\n" 
     "in vec2 TexCoords;\n"
@@ -107,6 +107,9 @@ const char* ssaoBlurFS =
     "uniform vec3 lightColor;\n"
     "uniform vec3 viewPos;\n"
     "uniform float shininess;\n"
+    "uniform float ambientStrength;\n"
+    "uniform float diffuseStrength;\n"
+    "uniform float specularStrength;\n"
     "uniform bool ssaoEnabled;\n"
     "in vec2 TexCoords;\n"
     "out vec3 FragColor;\n"
@@ -127,10 +130,10 @@ const char* ssaoBlurFS =
     "    vec3 reflectDir = reflect(-lightDir, normal);\n"
     "    vec3 viewDir = normalize(viewPos - fragPos);\n"
     "    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);\n"
-    "    vec3 ambient = 0.1 * lightColor * vec3(ssaoResult);\n"
+    "    vec3 ambient = lightColor * vec3(ssaoResult);\n"
     "    vec3 diffuse = diff * lightColor;\n"
     "    vec3 specular = spec * lightColor;\n"
-    "    FragColor = (ambient + diffuse + specular) * texture(gAlbedo, TexCoords).rgb;\n"
+    "    FragColor = (ambient * ambientStrength + diffuse * diffuseStrength + specular * specularStrength) * texture(gAlbedo, TexCoords).rgb;\n"
     "}\n";
 
 
@@ -158,6 +161,11 @@ float lastY = SCREEN_HEIGHT * 0.5f;
 float yaw = 90.0f;
 float pitch = 0.0f;
 float fov = 45.0f;
+
+float radius = 1.0f;
+float ambientStrength = 0.3f;
+float diffuseStrength = 1.0f;
+float specularStrength = 1.0f;
 
 bool ssaoEnabled = true;
 
@@ -283,6 +291,8 @@ int main(int argc, char** argv) {
   glUniform1i(glGetUniformLocation(ssaoProgram, "gNormal"), 1);
   glUniform1i(glGetUniformLocation(ssaoProgram, "texNoise"), 2);
 
+  glUniform1f(glGetUniformLocation(ssaoProgram, "radius"), radius);
+
   glUseProgram(ssaoBlurProgram);
   glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gPosition"), 0);
   glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gNormal"), 1);
@@ -293,6 +303,9 @@ int main(int argc, char** argv) {
   glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightColor"), 1, glm::value_ptr(lightColor));
   glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
   glUniform1f(glGetUniformLocation(ssaoBlurProgram, "shininess"), shininess);
+  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "ambientStrength"), ambientStrength);
+  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "diffuseStrength"), diffuseStrength);
+  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "specularStrength"), specularStrength);
 
   // 随机取样
   std::uniform_real_distribution<float> randomFloats(0.0f, 1.0f);
