@@ -76,7 +76,7 @@ const char* ssaoFS =
     "uniform vec3 kernel[64];\n"
     "uniform mat4 projection;\n"
     "uniform float radius;\n"
-    "const float bias = 0.05;\n"
+    "uniform float bias;\n"
     "const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);\n" 
     "in vec2 TexCoords;\n"
     "out float ssaoResult;\n"
@@ -102,20 +102,10 @@ const char* ssaoFS =
 
 const char* ssaoBlurFS =
     "#version 410\n"
-    "uniform sampler2D gPosition;\n"
-    "uniform sampler2D gNormal;\n"
     "uniform sampler2D ssaoInput;\n"
-    "uniform sampler2D gAlbedo;\n"
-    "uniform vec3 lightPos;\n"
-    "uniform vec3 lightColor;\n"
-    "uniform vec3 viewPos;\n"
-    "uniform float shininess;\n"
-    "uniform float ambientStrength;\n"
-    "uniform float diffuseStrength;\n"
-    "uniform float specularStrength;\n"
     "uniform bool ssaoEnabled;\n"
     "in vec2 TexCoords;\n"
-    "out vec3 FragColor;\n"
+    "out float ssaoBlurResult;\n"
     "void main() {\n"
     "    vec2 texelSize = 1.0 / vec2(textureSize(ssaoInput, 0));\n"
     "    float result = 0.0;\n"
@@ -125,20 +115,42 @@ const char* ssaoBlurFS =
     "            result += texture(ssaoInput, TexCoords + offset).r;\n"
     "        }\n"
     "    }\n"
-    "    float ssaoResult = ssaoEnabled ? result / (4.0 * 4.0) : 1.0;\n"
-    "    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);\n"
-    "    vec3 fragPos = texture(gPosition, TexCoords).rgb;\n"
-    "    vec3 lightDir = normalize(lightPos - fragPos);\n"
-    "    float diff = max(dot(normal, lightDir), 0.0);\n"
-    "    vec3 reflectDir = reflect(-lightDir, normal);\n"
-    "    vec3 viewDir = normalize(viewPos - fragPos);\n"
-    "    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);\n"
-    "    vec3 ambient = lightColor * vec3(ssaoResult);\n"
-    "    vec3 diffuse = diff * lightColor;\n"
-    "    vec3 specular = spec * lightColor;\n"
-    "    FragColor = (ambient * ambientStrength + diffuse * diffuseStrength + specular * specularStrength) * texture(gAlbedo, TexCoords).rgb;\n"
+    "    ssaoBlurResult = ssaoEnabled ? result / (4.0 * 4.0) : 1.0;\n"
     "}\n";
 
+const char* lightingFS =
+    "#version 410\n"
+    "uniform sampler2D gPosition;\n"
+    "uniform sampler2D gNormal;\n"
+    "uniform sampler2D gAlbedo;\n"
+    "uniform sampler2D ssao;\n"
+    "uniform vec3 lightPos;\n"
+    "uniform vec3 lightColor;\n"
+    "uniform float lightLinear;\n"
+    "uniform float lightQuadratic;\n"
+    "uniform float shininess;\n"
+    "uniform float ambientStrength;\n"
+    "uniform float diffuseStrength;\n"
+    "uniform float specularStrength;\n"
+    "in vec2 TexCoords;\n"
+    "out vec4 FragColor;\n"
+    "void main() {\n"
+    "    vec3 FragPos = texture(gPosition, TexCoords).rgb;\n"
+    "    vec3 Normal = texture(gNormal, TexCoords).rgb;\n"
+    "    vec3 Diffuse = texture(gAlbedo, TexCoords).rgb;\n"
+    "    float ssaoResult = texture(ssao, TexCoords).r;\n"
+    "    vec3 lightDir = normalize(lightPos - FragPos);\n"
+    "    float diff = max(dot(Normal, lightDir), 0.0);\n"
+    "    vec3 reflectDir = reflect(-lightDir, Normal);\n"
+    "    vec3 viewDir = normalize(-FragPos);\n"
+    "    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);\n"
+    "    vec3 ambient = ssaoResult * Diffuse;\n"
+    "    vec3 diffuse = diff * Diffuse * lightColor;\n"
+    "    float distance = length(lightPos- FragPos);\n"
+    "    float attenuation = 1.0 / (1.0 + lightLinear * distance + lightQuadratic * distance * distance);\n"
+    "    vec3 specular = spec * lightColor;\n"
+    "    FragColor = vec4(ambient * ambientStrength + diffuse * diffuseStrength + specular * specularStrength, 1.0);\n"
+    "}\n";
 
 void keyCallback(GLFWwindow* window,
                  int key,
@@ -166,6 +178,7 @@ float pitch = 0.0f;
 float fov = 45.0f;
 
 float radius = 1.0f;
+float bias = 0.05f;
 float ambientStrength = 0.3f;
 float diffuseStrength = 1.0f;
 float specularStrength = 1.0f;
@@ -177,8 +190,9 @@ glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 void draw_ui() {
-    ImGui::SliderFloat("radius", &radius, 0.0f, 1.0f);
-    ImGui::SliderFloat("shininess", &shininess, 0.0f, 200.0f);
+  ImGui::SliderFloat("radius", &radius, 0.0f, 2.0f);
+  ImGui::SliderFloat("bias", &bias, 0.0f, 0.1f);
+  ImGui::SliderFloat("shininess", &shininess, 0.0f, 10.0f);
 }
 
 int main(int argc, char** argv) {
@@ -218,6 +232,7 @@ int main(int argc, char** argv) {
   unsigned geometryProgram = createProgram(geometryVS, geometryFS);
   unsigned ssaoProgram = createProgram(ssaoVS, ssaoFS);
   unsigned ssaoBlurProgram = createProgram(ssaoVS, ssaoBlurFS);
+  unsigned lightingProgram = createProgram(ssaoVS, lightingFS);
 
   // 导入模型
   SkeletalMesh::Scene& sr =
@@ -284,7 +299,7 @@ int main(int argc, char** argv) {
   unsigned ssaoBuffer;
   glGenFramebuffers(1, &ssaoBuffer);
   glBindFramebuffer(GL_FRAMEBUFFER, ssaoBuffer);
-  unsigned int ssaoColorBuffer;
+  unsigned ssaoColorBuffer;
   // SSAO color buffer
   glGenTextures(1, &ssaoColorBuffer);
   glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
@@ -297,6 +312,22 @@ int main(int argc, char** argv) {
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     std::cout << "SSAO Framebuffer not complete!" << std::endl;
 
+  unsigned ssaoBlurBuffer;
+  glGenFramebuffers(1, &ssaoBlurBuffer);
+  glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurBuffer);
+  unsigned ssaoBlurColorBuffer;
+  // SSAO Blur color buffer
+  glGenTextures(1, &ssaoBlurColorBuffer);
+  glBindTexture(GL_TEXTURE_2D, ssaoBlurColorBuffer);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RED,
+               GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         ssaoBlurColorBuffer, 0);
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    std::cout << "SSAO Blur Framebuffer not complete!" << std::endl;
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   glEnable(GL_DEPTH_TEST);
@@ -307,21 +338,14 @@ int main(int argc, char** argv) {
   glUniform1i(glGetUniformLocation(ssaoProgram, "gNormal"), 1);
   glUniform1i(glGetUniformLocation(ssaoProgram, "texNoise"), 2);
 
-  glUniform1f(glGetUniformLocation(ssaoProgram, "radius"), radius);
-
   glUseProgram(ssaoBlurProgram);
-  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gPosition"), 0);
-  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gNormal"), 1);
-  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoInput"), 2);
-  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "gAlbedo"), 3);
+  glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoInput"), 0);
 
-  glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightPos"), 1, glm::value_ptr(lightPos));
-  glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "lightColor"), 1, glm::value_ptr(lightColor));
-  glUniform3fv(glGetUniformLocation(ssaoBlurProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
-  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "shininess"), shininess);
-  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "ambientStrength"), ambientStrength);
-  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "diffuseStrength"), diffuseStrength);
-  glUniform1f(glGetUniformLocation(ssaoBlurProgram, "specularStrength"), specularStrength);
+  glUseProgram(lightingProgram);
+  glUniform1i(glGetUniformLocation(lightingProgram, "gPosition"), 0);
+  glUniform1i(glGetUniformLocation(lightingProgram, "gNormal"), 1);
+  glUniform1i(glGetUniformLocation(lightingProgram, "gAlbedo"), 2);
+  glUniform1i(glGetUniformLocation(lightingProgram, "ssao"), 3);
 
   // 随机取样
   std::uniform_real_distribution<float> randomFloats(0.0f, 1.0f);
@@ -422,12 +446,10 @@ int main(int argc, char** argv) {
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoBuffer);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(ssaoProgram);
-    for (unsigned int i = 0; i < 64; ++i) {
-      glUniform3fv(
-          glGetUniformLocation(ssaoProgram,
-                               ("kernel[" + std::to_string(i) + "]").c_str()),
-          1, glm::value_ptr(ssaoKernel[i]));
-    }
+    glUniform1f(glGetUniformLocation(ssaoProgram, "radius"), radius);
+    glUniform1f(glGetUniformLocation(ssaoProgram, "bias"), bias);
+    glUniform3fv(glGetUniformLocation(ssaoProgram, "kernel"), 64,
+                 glm::value_ptr(ssaoKernel[0]));
     glUniformMatrix4fv(glGetUniformLocation(ssaoProgram, "projection"), 1,
                        GL_FALSE, glm::value_ptr(projection));
     glActiveTexture(GL_TEXTURE0);
@@ -440,20 +462,45 @@ int main(int argc, char** argv) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // SSAO Blur PASS
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurBuffer);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(ssaoBlurProgram);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+    glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoEnabled"),
+                ssaoEnabled);
+    renderQuad();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Lighting Pass
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(lightingProgram);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, gPosition);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, gNormal);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
-    glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
-    glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoEnabled"), ssaoEnabled);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, ssaoBlurColorBuffer);
+    glUniform1f(glGetUniformLocation(lightingProgram, "shininess"), shininess);
+    glUniform3fv(glGetUniformLocation(lightingProgram, "lightPos"), 1,
+                 glm::value_ptr(glm::vec3(view * glm::vec4(lightPos, 1.0f))));
+    glUniform3fv(glGetUniformLocation(lightingProgram, "lightColor"), 1,
+                 glm::value_ptr(lightColor));
+    glUniform1f(glGetUniformLocation(lightingProgram, "ambientStrength"),
+                ambientStrength);
+    glUniform1f(glGetUniformLocation(lightingProgram, "diffuseStrength"),
+                diffuseStrength);
+    glUniform1f(glGetUniformLocation(lightingProgram, "specularStrength"),
+                specularStrength);
+    const float linear = 0.09f;
+    const float quadratic = 0.032f;
+    glUniform1f(glGetUniformLocation(lightingProgram, "lightLinear"),
+                linear);
+    glUniform1f(glGetUniformLocation(lightingProgram, "lightQuadratic"),
+                quadratic);
     renderQuad();
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     draw_ui();
 
@@ -481,7 +528,7 @@ void keyCallback(GLFWwindow *window,
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
     glfwSetWindowShouldClose(window, true);
   }
-  if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+  if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
     lightfollow ^= 1;
   }
   if (key == GLFW_KEY_F && action == GLFW_PRESS) {
@@ -501,17 +548,20 @@ void keyCallback(GLFWwindow *window,
 float cameraSpeed = 3.0f;
 void doMovement(float timePeriod) {
   float distance = timePeriod * cameraSpeed;
+  glm::vec3 front = cameraFront;
+  front.y = 0.0f;
+  front = normalize(front);
   if (keyPressed[GLFW_KEY_W]) {
-    cameraPos += distance * cameraFront;
+    cameraPos += distance * front;
   }
   if (keyPressed[GLFW_KEY_S]) {
-    cameraPos -= distance * cameraFront;
+    cameraPos -= distance * front;
   }
   if (keyPressed[GLFW_KEY_A]) {
-    cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * distance;
+    cameraPos -= glm::cross(front, cameraUp) * distance;
   }
   if (keyPressed[GLFW_KEY_D]) {
-    cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * distance;
+    cameraPos += glm::cross(front, cameraUp) * distance;
   }
   if (keyPressed[GLFW_KEY_SPACE]) {
     cameraPos += cameraUp * distance;
