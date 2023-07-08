@@ -54,7 +54,6 @@ const char* geometryFS =
     "void main() {\n"
     "    gPosition = FragPos;\n"
     "    gNormal = normalize(Normal);\n"
-    // "    gAlbedo.rgb = vec3(0.95);\n"
     "    gAlbedo.rgb = vec3(TexCoords, 1.0);\n"
     "}\n";
 
@@ -80,6 +79,7 @@ const char* ssaoFS =
     "const vec2 noiseScale = vec2(800.0/4.0, 600.0/4.0);\n" 
     "in vec2 TexCoords;\n"
     "out float ssaoResult;\n"
+    "uniform bool ssaoEnabled;\n"
     "void main() {\n"
     "    vec3 fragPos = texture(gPosition, TexCoords).xyz;\n"
     "    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);\n"
@@ -97,13 +97,13 @@ const char* ssaoFS =
     "        float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));\n"
     "        occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;\n"
     "    }\n"
-    "    ssaoResult = 1.0 - occlusion / 64.0;\n"
+    "    ssaoResult = ssaoEnabled ? 1.0 - occlusion / 64.0 : 1.0;\n"
     "}\n";
 
 const char* ssaoBlurFS =
     "#version 410\n"
     "uniform sampler2D ssaoInput;\n"
-    "uniform bool ssaoEnabled;\n"
+    "uniform bool ssaoBlurEnabled;\n"
     "in vec2 TexCoords;\n"
     "out float ssaoBlurResult;\n"
     "void main() {\n"
@@ -115,7 +115,7 @@ const char* ssaoBlurFS =
     "            result += texture(ssaoInput, TexCoords + offset).r;\n"
     "        }\n"
     "    }\n"
-    "    ssaoBlurResult = ssaoEnabled ? result / (4.0 * 4.0) : 1.0;\n"
+    "    ssaoBlurResult = ssaoBlurEnabled ? result / (4.0 * 4.0) : texture(ssaoInput, TexCoords).r;\n"
     "}\n";
 
 const char* lightingFS =
@@ -132,6 +132,7 @@ const char* lightingFS =
     "uniform float ambientStrength;\n"
     "uniform float diffuseStrength;\n"
     "uniform float specularStrength;\n"
+    "uniform bool lightingEnabled;\n"
     "in vec2 TexCoords;\n"
     "out vec4 FragColor;\n"
     "void main() {\n"
@@ -150,6 +151,9 @@ const char* lightingFS =
     "    float attenuation = 1.0 / (1.0 + lightLinear * distance + lightQuadratic * distance * distance);\n"
     "    vec3 specular = spec * lightColor;\n"
     "    FragColor = vec4(ambient * ambientStrength + diffuse * diffuseStrength + specular * specularStrength, 1.0);\n"
+    "    if (!lightingEnabled) {\n"
+    "        FragColor = vec4(ambient, 1.0);\n"
+    "    }\n"
     "}\n";
 
 void keyCallback(GLFWwindow* window,
@@ -183,7 +187,9 @@ float ambientStrength = 0.3f;
 float diffuseStrength = 1.0f;
 float specularStrength = 1.0f;
 
-bool ssaoEnabled = true;
+int ssaoEnabled = true;
+int ssaoBlurEnabled = true;
+int lightingEnabled = true;
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -193,6 +199,9 @@ void draw_ui() {
   ImGui::SliderFloat("radius", &radius, 0.0f, 2.0f);
   ImGui::SliderFloat("bias", &bias, 0.0f, 0.1f);
   ImGui::SliderFloat("shininess", &shininess, 0.0f, 10.0f);
+  ImGui::SliderInt("ssaoEnabled", &ssaoEnabled, 0, 1);
+  ImGui::SliderInt("ssaoBlurEnabled", &ssaoBlurEnabled, 0, 1);
+  ImGui::SliderInt("lightingEnabled", &lightingEnabled, 0, 1);
 }
 
 int main(int argc, char** argv) {
@@ -452,6 +461,8 @@ int main(int argc, char** argv) {
                  glm::value_ptr(ssaoKernel[0]));
     glUniformMatrix4fv(glGetUniformLocation(ssaoProgram, "projection"), 1,
                        GL_FALSE, glm::value_ptr(projection));
+    glUniform1i(glGetUniformLocation(ssaoProgram, "ssaoEnabled"),
+                ssaoEnabled);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, gPosition);
     glActiveTexture(GL_TEXTURE1);
@@ -467,8 +478,8 @@ int main(int argc, char** argv) {
     glUseProgram(ssaoBlurProgram);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
-    glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoEnabled"),
-                ssaoEnabled);
+    glUniform1i(glGetUniformLocation(ssaoBlurProgram, "ssaoBlurEnabled"),
+                ssaoBlurEnabled);
     renderQuad();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -500,6 +511,8 @@ int main(int argc, char** argv) {
                 linear);
     glUniform1f(glGetUniformLocation(lightingProgram, "lightQuadratic"),
                 quadratic);
+    glUniform1i(glGetUniformLocation(lightingProgram, "lightingEnabled"),
+                lightingEnabled);
     renderQuad();
 
     draw_ui();
